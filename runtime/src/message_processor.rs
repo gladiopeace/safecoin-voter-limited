@@ -13,7 +13,7 @@ use solana_sdk::{
         updated_verify_policy, FeatureSet,
     },
     ic_msg,
-    instruction::{CompiledInstruction, Instruction, InstructionError},
+    instruction::{CompiledInstruction, Instruction, InstructionError, VoterGroup},
     keyed_account::{create_keyed_readonly_accounts, KeyedAccount},
     message::Message,
     native_loader,
@@ -282,6 +282,7 @@ pub struct ThisInvokeContext<'a> {
     ancestors: &'a Ancestors,
     #[allow(clippy::type_complexity)]
     sysvars: RefCell<Vec<(Pubkey, Option<Rc<Vec<u8>>>)>>,
+    voter_grp : &'a dyn VoterGroup
 }
 impl<'a> ThisInvokeContext<'a> {
     #[allow(clippy::too_many_arguments)]
@@ -299,6 +300,7 @@ impl<'a> ThisInvokeContext<'a> {
         feature_set: Arc<FeatureSet>,
         account_db: Arc<Accounts>,
         ancestors: &'a Ancestors,
+        voter_grp: &'a dyn VoterGroup,
     ) -> Self {
         let mut program_ids = Vec::with_capacity(bpf_compute_budget.max_invoke_depth);
         program_ids.push(*program_id);
@@ -321,6 +323,7 @@ impl<'a> ThisInvokeContext<'a> {
             account_db,
             ancestors,
             sysvars: RefCell::new(vec![]),
+            voter_grp,
         }
     }
 }
@@ -460,6 +463,9 @@ impl<'a> InvokeContext for ThisInvokeContext<'a> {
         } else {
             None
         }
+    }
+    fn voter_group(&self) -> & dyn VoterGroup {
+        self.voter_grp
     }
 }
 pub struct ThisLogger {
@@ -1096,6 +1102,7 @@ impl MessageProcessor {
         demote_sysvar_write_locks: bool,
         account_db: Arc<Accounts>,
         ancestors: &Ancestors,
+        voter_grp : &dyn VoterGroup
     ) -> Result<(), InstructionError> {
         // Fixup the special instructions key if present
         // before the account pre-values are taken care of
@@ -1128,6 +1135,8 @@ impl MessageProcessor {
             feature_set,
             account_db,
             ancestors,
+            voter_grp,
+            
         );
         let keyed_accounts = Self::create_keyed_accounts(
             message,
@@ -1179,6 +1188,7 @@ impl MessageProcessor {
         timings: &mut ExecuteDetailsTimings,
         account_db: Arc<Accounts>,
         ancestors: &Ancestors,
+        voter_grp: &dyn VoterGroup,
     ) -> Result<(), TransactionError> {
         let demote_sysvar_write_locks = feature_set.is_active(&demote_sysvar_write_locks::id());
         for (instruction_index, instruction) in message.instructions.iter().enumerate() {
@@ -1202,6 +1212,7 @@ impl MessageProcessor {
                 demote_sysvar_write_locks,
                 account_db.clone(),
                 ancestors,
+                voter_grp,
             )
             .map_err(|err| TransactionError::InstructionError(instruction_index as u8, err))?;
         }

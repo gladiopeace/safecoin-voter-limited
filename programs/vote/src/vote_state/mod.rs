@@ -17,6 +17,7 @@ use solana_sdk::{
     rent::Rent,
     slot_hashes::SlotHash,
     sysvar::clock::Clock,
+    instruction::VoterGroup,
 };
 use std::boxed::Box;
 use std::cmp::Ordering;
@@ -352,6 +353,9 @@ impl VoteState {
         if vote.slots.is_empty() {
             return Err(VoteError::EmptySlots);
         }
+
+
+
         self.check_slots_are_valid(vote, slot_hashes)?;
 
         vote.slots.iter().for_each(|s| self.process_slot(*s, epoch));
@@ -723,6 +727,7 @@ pub fn process_vote<S: std::hash::BuildHasher>(
     clock: &Clock,
     vote: &Vote,
     signers: &HashSet<Pubkey, S>,
+    group: &dyn VoterGroup,
 ) -> Result<(), InstructionError> {
     let versioned = State::<VoteStateVersions>::state(vote_account)?;
 
@@ -733,7 +738,14 @@ pub fn process_vote<S: std::hash::BuildHasher>(
     let mut vote_state = versioned.convert_to_current();
     let authorized_voter = vote_state.get_and_update_authorized_voter(clock.epoch)?;
     verify_authorized_signer(&authorized_voter, signers)?;
-
+    log::trace!("slot: {}", clock.slot);
+    log::trace!("last_hashy: {}", slot_hashes[0].1);
+    log::trace!("last_hashzy: {}", slot_hashes[0].0);
+    log::trace!("P: {}", authorized_voter.to_string().to_lowercase().find("x").unwrap_or(2) % 10);
+    let hash = slot_hashes[0].1;
+    if !group.in_group(vote.slots[0],hash,authorized_voter) {
+        return Err(InstructionError::UninitializedAccount);
+    }
     vote_state.process_vote(vote, slot_hashes, clock.epoch)?;
     if let Some(timestamp) = vote.timestamp {
         vote.slots

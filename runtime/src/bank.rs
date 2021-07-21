@@ -55,7 +55,7 @@ use solana_sdk::{
     hash::{extend_and_hash, hashv, Hash},
     incinerator,
     inflation::Inflation,
-    instruction::CompiledInstruction,
+    instruction::{CompiledInstruction,VoterGroup},
     message::Message,
     native_loader,
     native_token::sol_to_lamports,
@@ -3055,6 +3055,7 @@ impl Bank {
                         &mut timings.details,
                         self.rc.accounts.clone(),
                         &self.ancestors,
+                        self,
                     );
 
                     if enable_log_recording {
@@ -5090,6 +5091,21 @@ impl Bank {
             ClusterType::MainnetBeta => self
                 .feature_set
                 .is_active(&feature_set::consistent_recent_blockhashes_sysvar::id()),
+        }
+    }
+}
+
+impl VoterGroup for Bank {
+        
+    /// determine if a voter is in the group for a given slot
+    fn in_group(&self, slot : Slot, hash: Hash, voter: Pubkey) -> bool {
+        let epoch = self.epoch_schedule.get_epoch(slot);
+        match self.epoch_stakes.get(&epoch){
+            None => panic!("No epoch"),
+            Some(stakes) =>{
+                let vgr = stakes.get_group_genr();
+                return vgr.in_group_for_hash(hash, voter) 
+            }
         }
     }
 }
